@@ -1,17 +1,20 @@
 import { useState, useEffect } from "react";
 import { AirQualityCard } from "@/components/AirQualityCard";
-import { HealthProfileForm } from "@/components/HealthProfileForm";
+import { HealthProfileForm, UserHealthProfile } from "@/components/HealthProfileForm";
+import { HealthProfileDisplay } from "@/components/HealthProfileDisplay";
 import { HealthRecommendations } from "@/components/HealthRecommendations";
 import { AlertNotification } from "@/components/AlertNotification";
+import { NearbyHospitals } from "@/components/NearbyHospitals";
 import { Button } from "@/components/ui/button";
-import { MapPin, RefreshCw, Settings } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { MapPin, RefreshCw, User, Hospital } from "lucide-react";
 import heroImage from "@/assets/hero-clean-air.jpg";
 
 const Index = () => {
   const [pm25Value, setPm25Value] = useState(45);
   const [location, setLocation] = useState("กรุงเทพมหานคร");
-  const [userConditions, setUserConditions] = useState<string[]>([]);
-  const [showProfile, setShowProfile] = useState(false);
+  const [userProfile, setUserProfile] = useState<UserHealthProfile | null>(null);
+  const [showProfileForm, setShowProfileForm] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const currentTime = new Date().toLocaleString('th-TH', {
@@ -22,18 +25,34 @@ const Index = () => {
     minute: '2-digit'
   });
 
+  // Load saved profile from localStorage on mount
+  useEffect(() => {
+    const savedProfile = localStorage.getItem('healthProfile');
+    if (savedProfile) {
+      try {
+        setUserProfile(JSON.parse(savedProfile));
+      } catch (e) {
+        console.error('Failed to load profile:', e);
+      }
+    }
+  }, []);
+
   const handleRefresh = () => {
     setIsRefreshing(true);
-    // Simulate API call with random PM2.5 value
     setTimeout(() => {
       setPm25Value(Math.floor(Math.random() * 100) + 10);
       setIsRefreshing(false);
     }, 1000);
   };
 
-  const handleSaveProfile = (conditions: string[]) => {
-    setUserConditions(conditions);
-    setShowProfile(false);
+  const handleSaveProfile = (profile: UserHealthProfile) => {
+    setUserProfile(profile);
+    localStorage.setItem('healthProfile', JSON.stringify(profile));
+    setShowProfileForm(false);
+  };
+
+  const handleEditProfile = () => {
+    setShowProfileForm(true);
   };
 
   return (
@@ -64,7 +83,7 @@ const Index = () => {
         <AlertNotification 
           pm25={pm25Value} 
           location={location}
-          hasHealthConditions={userConditions.length > 0}
+          hasHealthConditions={userProfile !== null && userProfile.conditions.length > 0}
         />
 
         {/* Action Buttons */}
@@ -85,14 +104,15 @@ const Index = () => {
             <MapPin className="w-4 h-4 mr-2" />
             เปลี่ยนพื้นที่
           </Button>
-          <Button
-            onClick={() => setShowProfile(!showProfile)}
-            variant="outline"
-            className="flex-1 min-w-[140px]"
-          >
-            <Settings className="w-4 h-4 mr-2" />
-            ตั้งค่าสุขภาพ
-          </Button>
+          {!userProfile && (
+            <Button
+              onClick={() => setShowProfileForm(true)}
+              className="flex-1 min-w-[140px] bg-secondary text-secondary-foreground hover:bg-secondary/90"
+            >
+              <User className="w-4 h-4 mr-2" />
+              ตั้งค่าโปรไฟล์
+            </Button>
+          )}
         </div>
 
         {/* Air Quality Card */}
@@ -102,18 +122,41 @@ const Index = () => {
           timestamp={currentTime}
         />
 
-        {/* Health Profile Form */}
-        {showProfile && (
+        {/* User Profile Display or Form */}
+        {userProfile && !showProfileForm ? (
+          <HealthProfileDisplay 
+            profile={userProfile}
+            onEdit={handleEditProfile}
+          />
+        ) : showProfileForm ? (
           <div className="animate-in slide-in-from-top-5 duration-500">
-            <HealthProfileForm onSave={handleSaveProfile} />
+            <HealthProfileForm 
+              onSave={handleSaveProfile}
+              initialProfile={userProfile || undefined}
+            />
           </div>
-        )}
+        ) : null}
 
-        {/* Health Recommendations */}
-        <HealthRecommendations 
-          pm25={pm25Value}
-          hasHealthConditions={userConditions.length > 0}
-        />
+        {/* Tabs for Recommendations and Hospitals */}
+        <Tabs defaultValue="recommendations" className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="recommendations">คำแนะนำสุขภาพ</TabsTrigger>
+            <TabsTrigger value="hospitals">
+              <Hospital className="w-4 h-4 mr-2" />
+              โรงพยาบาล
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="recommendations" className="mt-4">
+            <HealthRecommendations 
+              pm25={pm25Value}
+              hasHealthConditions={userProfile !== null && userProfile.conditions.length > 0}
+              userConditions={userProfile?.conditions || []}
+            />
+          </TabsContent>
+          <TabsContent value="hospitals" className="mt-4">
+            <NearbyHospitals />
+          </TabsContent>
+        </Tabs>
 
         {/* Info Footer */}
         <div className="text-center text-sm text-muted-foreground py-4">

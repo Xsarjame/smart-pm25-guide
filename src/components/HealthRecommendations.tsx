@@ -1,13 +1,40 @@
 import { Card } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Shield, AlertCircle, Droplets, Users, Wind as WindIcon } from "lucide-react";
+import { Shield, AlertCircle, Droplets, Users, Wind as WindIcon, Heart } from "lucide-react";
 
 interface HealthRecommendationsProps {
   pm25: number;
   hasHealthConditions?: boolean;
+  userConditions?: string[];
 }
 
-export const HealthRecommendations = ({ pm25, hasHealthConditions }: HealthRecommendationsProps) => {
+export const HealthRecommendations = ({ pm25, hasHealthConditions, userConditions = [] }: HealthRecommendationsProps) => {
+  const getConditionSpecificAdvice = () => {
+    const advice: string[] = [];
+    
+    if (userConditions.includes("asthma")) {
+      advice.push("🫁 โรคหอบหืด: พกยาขยายหลอดลมติดตัวเสมอ ระวังอาการกำเริบ");
+    }
+    if (userConditions.includes("copd")) {
+      advice.push("🫁 COPD: หลีกเลี่ยงกิจกรรมหนักๆ ใช้ออกซิเจนตามแพทย์สั่ง");
+    }
+    if (userConditions.includes("heart")) {
+      advice.push("❤️ โรคหัวใจ: หลีกเลี่ยงความเครียด พักผ่อนให้เพียงพอ");
+    }
+    if (userConditions.includes("pregnant")) {
+      advice.push("🤰 หญิงตั้งครรภ์: อยู่ในที่ร่ม ดื่มน้ำเยอะๆ หากมีอาการผิดปกติพบแพทย์ทันที");
+    }
+    if (userConditions.includes("elderly")) {
+      advice.push("👴 ผู้สูงอายุ: ลดการออกจากบ้าน ดื่มน้ำบ่อยๆ พักผ่อนให้เพียงพอ");
+    }
+    if (userConditions.includes("children")) {
+      advice.push("👶 เด็กเล็ก: ไม่ควรให้เด็กเล่นกลางแจ้ง สังเกตอาการหายใจ");
+    }
+    
+    return advice;
+  };
+
+  const conditionAdvice = getConditionSpecificAdvice();
   const getRecommendations = () => {
     if (pm25 <= 25) {
       return {
@@ -92,6 +119,23 @@ export const HealthRecommendations = ({ pm25, hasHealthConditions }: HealthRecom
             </div>
           ))}
         </div>
+
+        {conditionAdvice.length > 0 && (
+          <div className="space-y-2 pt-4 border-t border-border">
+            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <Heart className="w-4 h-4 text-destructive" />
+              คำแนะนำเฉพาะสำหรับโรคประจำตัวของคุณ
+            </h3>
+            <div className="space-y-2">
+              {conditionAdvice.map((advice, index) => (
+                <div key={index} className="flex items-start gap-2 bg-muted/50 p-2 rounded-md">
+                  <div className="mt-1 w-1.5 h-1.5 rounded-full bg-destructive flex-shrink-0" />
+                  <p className="text-sm text-foreground">{advice}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="pt-4 border-t border-border">
           <div className="grid grid-cols-3 gap-4 text-center">
