@@ -7,25 +7,15 @@ import { AlertNotification } from "@/components/AlertNotification";
 import { NearbyHospitals } from "@/components/NearbyHospitals";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MapPin, RefreshCw, User, Hospital } from "lucide-react";
+import { MapPin, RefreshCw, User, Hospital, Loader2 } from "lucide-react";
 import heroImage from "@/assets/hero-clean-air.jpg";
+import { useAirQuality } from "@/hooks/useAirQuality";
 
 const Index = () => {
-  const [pm25Value, setPm25Value] = useState(45);
-  const [location, setLocation] = useState("กรุงเทพมหานคร");
+  const { data, loading, refresh } = useAirQuality();
   const [userProfile, setUserProfile] = useState<UserHealthProfile | null>(null);
   const [showProfileForm, setShowProfileForm] = useState(false);
-  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const currentTime = new Date().toLocaleString('th-TH', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  });
-
-  // Load saved profile from localStorage on mount
   useEffect(() => {
     const savedProfile = localStorage.getItem('healthProfile');
     if (savedProfile) {
@@ -37,14 +27,6 @@ const Index = () => {
     }
   }, []);
 
-  const handleRefresh = () => {
-    setIsRefreshing(true);
-    setTimeout(() => {
-      setPm25Value(Math.floor(Math.random() * 100) + 10);
-      setIsRefreshing(false);
-    }, 1000);
-  };
-
   const handleSaveProfile = (profile: UserHealthProfile) => {
     setUserProfile(profile);
     localStorage.setItem('healthProfile', JSON.stringify(profile));
@@ -54,6 +36,24 @@ const Index = () => {
   const handleEditProfile = () => {
     setShowProfileForm(true);
   };
+
+  const pm25Value = data?.pm25 || 0;
+  const location = data?.location || 'กำลังโหลด...';
+  const currentTime = data?.timestamp 
+    ? new Date(data.timestamp).toLocaleString('th-TH', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      })
+    : new Date().toLocaleString('th-TH', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
 
   return (
     <div className="min-h-screen bg-gradient-sky">
@@ -89,20 +89,17 @@ const Index = () => {
         {/* Action Buttons */}
         <div className="flex gap-3 flex-wrap">
           <Button
-            onClick={handleRefresh}
+            onClick={refresh}
             variant="outline"
-            disabled={isRefreshing}
+            disabled={loading}
             className="flex-1 min-w-[140px]"
           >
-            <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
-            อัพเดทข้อมูล
-          </Button>
-          <Button
-            variant="outline"
-            className="flex-1 min-w-[140px]"
-          >
-            <MapPin className="w-4 h-4 mr-2" />
-            เปลี่ยนพื้นที่
+            {loading ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <RefreshCw className="w-4 h-4 mr-2" />
+            )}
+            {loading ? 'กำลังอัปเดต...' : 'อัพเดทข้อมูล'}
           </Button>
           {!userProfile && (
             <Button
