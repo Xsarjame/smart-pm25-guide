@@ -12,55 +12,50 @@ serve(async (req) => {
 
   try {
     const { latitude, longitude } = await req.json();
+    const AQICN_API_KEY = Deno.env.get('AQICN_API_KEY');
+
+    if (!AQICN_API_KEY) {
+      throw new Error('AQICN_API_KEY is not configured');
+    }
 
     console.log('Fetching air quality data for:', { latitude, longitude });
 
-    // Fetch air quality data from Open-Meteo (free, no API key required)
-    const airQualityResponse = await fetch(
-      `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${latitude}&longitude=${longitude}&current=pm2_5,european_aqi`
+    // Fetch air quality data from AQICN (World Air Quality Index)
+    const aqicnResponse = await fetch(
+      `https://api.waqi.info/feed/geo:${latitude};${longitude}/?token=${AQICN_API_KEY}`
     );
 
-    if (!airQualityResponse.ok) {
-      const errorText = await airQualityResponse.text();
-      console.error('Open-Meteo Air Quality API error:', airQualityResponse.status, errorText);
-      throw new Error(`Air Quality API error: ${airQualityResponse.status}`);
+    if (!aqicnResponse.ok) {
+      const errorText = await aqicnResponse.text();
+      console.error('AQICN API error:', aqicnResponse.status, errorText);
+      throw new Error(`AQICN API error: ${aqicnResponse.status}`);
     }
 
-    const airQualityData = await airQualityResponse.json();
-    console.log('Air quality data received:', airQualityData);
+    const aqicnData = await aqicnResponse.json();
+    console.log('AQICN data received:', aqicnData);
 
-    // Fetch weather data from Open-Meteo for temperature and humidity
-    const weatherResponse = await fetch(
-      `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m`
-    );
+    if (aqicnData.status !== 'ok') {
+      throw new Error(`AQICN API error: ${aqicnData.data || 'Unknown error'}`);
+    }
 
-    let temperature = 25;
-    let humidity = 60;
+    const { data } = aqicnData;
+
+    // Extract PM2.5 from AQICN data
+    const pm25 = data.iaqi?.pm25?.v || data.aqi || 0;
     
-    if (weatherResponse.ok) {
-      const weatherData = await weatherResponse.json();
-      temperature = Math.round(weatherData.current.temperature_2m);
-      humidity = Math.round(weatherData.current.relative_humidity_2m);
-    }
+    // Extract location
+    const location = data.city?.name || 'Unknown Location';
+    
+    // Extract timestamp
+    const timestamp = data.time?.iso || new Date().toISOString();
 
-    // Fetch location name from Open-Meteo geocoding
-    const geoResponse = await fetch(
-      `https://geocoding-api.open-meteo.com/v1/search?latitude=${latitude}&longitude=${longitude}&count=1&language=en&format=json`
-    );
+    // Get temperature and humidity from AQICN if available
+    let temperature = data.iaqi?.t?.v || 25;
+    let humidity = data.iaqi?.h?.v || 60;
 
-    let location = 'Unknown Location';
-    if (geoResponse.ok) {
-      const geoData = await geoResponse.json();
-      if (geoData.results && geoData.results.length > 0) {
-        const result = geoData.results[0];
-        location = result.name || 'Unknown Location';
-        if (result.admin1) location += `, ${result.admin1}`;
-        if (result.country) location += `, ${result.country}`;
-      }
-    }
-
-    const pm25 = Math.round(airQualityData.current.pm2_5 || 0);
-    const timestamp = new Date().toISOString();
+    // Round values
+    temperature = Math.round(temperature);
+    humidity = Math.round(humidity);
     
     return new Response(
       JSON.stringify({
