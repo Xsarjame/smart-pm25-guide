@@ -12,31 +12,26 @@ serve(async (req) => {
 
   try {
     const { latitude, longitude } = await req.json();
-    const OPENWEATHER_API_KEY = Deno.env.get('OPENWEATHER_API_KEY');
-
-    if (!OPENWEATHER_API_KEY) {
-      throw new Error('OPENWEATHER_API_KEY is not configured');
-    }
 
     console.log('Fetching air quality data for:', { latitude, longitude });
 
-    // Fetch air pollution data
-    const pollutionResponse = await fetch(
-      `http://api.openweathermap.org/data/2.5/air_pollution?lat=${latitude}&lon=${longitude}&appid=${OPENWEATHER_API_KEY}`
+    // Fetch air quality data from Open-Meteo (free, no API key required)
+    const airQualityResponse = await fetch(
+      `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${latitude}&longitude=${longitude}&current=pm2_5,european_aqi`
     );
 
-    if (!pollutionResponse.ok) {
-      const errorText = await pollutionResponse.text();
-      console.error('OpenWeather API error:', pollutionResponse.status, errorText);
-      throw new Error(`OpenWeather API error: ${pollutionResponse.status}`);
+    if (!airQualityResponse.ok) {
+      const errorText = await airQualityResponse.text();
+      console.error('Open-Meteo Air Quality API error:', airQualityResponse.status, errorText);
+      throw new Error(`Air Quality API error: ${airQualityResponse.status}`);
     }
 
-    const pollutionData = await pollutionResponse.json();
-    console.log('Air pollution data received:', pollutionData);
+    const airQualityData = await airQualityResponse.json();
+    console.log('Air quality data received:', airQualityData);
 
-    // Fetch weather data for temperature and humidity
+    // Fetch weather data from Open-Meteo for temperature and humidity
     const weatherResponse = await fetch(
-      `http://api.openweathermap.org/data/2.5/weather?lat=${latitude}&lon=${longitude}&appid=${OPENWEATHER_API_KEY}&units=metric`
+      `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m`
     );
 
     let temperature = 25;
@@ -44,27 +39,28 @@ serve(async (req) => {
     
     if (weatherResponse.ok) {
       const weatherData = await weatherResponse.json();
-      temperature = Math.round(weatherData.main.temp);
-      humidity = weatherData.main.humidity;
+      temperature = Math.round(weatherData.current.temperature_2m);
+      humidity = Math.round(weatherData.current.relative_humidity_2m);
     }
 
-    // Fetch location name
+    // Fetch location name from Open-Meteo geocoding
     const geoResponse = await fetch(
-      `http://api.openweathermap.org/geo/1.0/reverse?lat=${latitude}&lon=${longitude}&limit=1&appid=${OPENWEATHER_API_KEY}`
+      `https://geocoding-api.open-meteo.com/v1/search?latitude=${latitude}&longitude=${longitude}&count=1&language=en&format=json`
     );
 
     let location = 'Unknown Location';
     if (geoResponse.ok) {
       const geoData = await geoResponse.json();
-      if (geoData.length > 0) {
-        const city = geoData[0].name || geoData[0].local_names?.th || 'Unknown';
-        const country = geoData[0].country || '';
-        location = `${city}, ${country}`;
+      if (geoData.results && geoData.results.length > 0) {
+        const result = geoData.results[0];
+        location = result.name || 'Unknown Location';
+        if (result.admin1) location += `, ${result.admin1}`;
+        if (result.country) location += `, ${result.country}`;
       }
     }
 
-    const pm25 = pollutionData.list[0].components.pm2_5;
-    const timestamp = new Date(pollutionData.list[0].dt * 1000).toISOString();
+    const pm25 = Math.round(airQualityData.current.pm2_5 || 0);
+    const timestamp = new Date().toISOString();
     
     return new Response(
       JSON.stringify({
