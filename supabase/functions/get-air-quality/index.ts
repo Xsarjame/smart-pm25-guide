@@ -12,36 +12,67 @@ serve(async (req) => {
 
   try {
     const { latitude, longitude } = await req.json();
-    const IQAIR_API_KEY = Deno.env.get('IQAIR_API_KEY');
+    const OPENWEATHER_API_KEY = Deno.env.get('OPENWEATHER_API_KEY');
 
-    if (!IQAIR_API_KEY) {
-      throw new Error('IQAIR_API_KEY is not configured');
+    if (!OPENWEATHER_API_KEY) {
+      throw new Error('OPENWEATHER_API_KEY is not configured');
     }
 
     console.log('Fetching air quality data for:', { latitude, longitude });
 
-    const response = await fetch(
-      `https://api.airvisual.com/v2/nearest_city?lat=${latitude}&lon=${longitude}&key=${IQAIR_API_KEY}`
+    // Fetch air pollution data
+    const pollutionResponse = await fetch(
+      `http://api.openweathermap.org/data/2.5/air_pollution?lat=${latitude}&lon=${longitude}&appid=${OPENWEATHER_API_KEY}`
     );
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('IQAir API error:', response.status, errorText);
-      throw new Error(`IQAir API error: ${response.status}`);
+    if (!pollutionResponse.ok) {
+      const errorText = await pollutionResponse.text();
+      console.error('OpenWeather API error:', pollutionResponse.status, errorText);
+      throw new Error(`OpenWeather API error: ${pollutionResponse.status}`);
     }
 
-    const data = await response.json();
-    console.log('Air quality data received:', data);
+    const pollutionData = await pollutionResponse.json();
+    console.log('Air pollution data received:', pollutionData);
 
-    const { current } = data.data;
+    // Fetch weather data for temperature and humidity
+    const weatherResponse = await fetch(
+      `http://api.openweathermap.org/data/2.5/weather?lat=${latitude}&lon=${longitude}&appid=${OPENWEATHER_API_KEY}&units=metric`
+    );
+
+    let temperature = 25;
+    let humidity = 60;
+    
+    if (weatherResponse.ok) {
+      const weatherData = await weatherResponse.json();
+      temperature = Math.round(weatherData.main.temp);
+      humidity = weatherData.main.humidity;
+    }
+
+    // Fetch location name
+    const geoResponse = await fetch(
+      `http://api.openweathermap.org/geo/1.0/reverse?lat=${latitude}&lon=${longitude}&limit=1&appid=${OPENWEATHER_API_KEY}`
+    );
+
+    let location = 'Unknown Location';
+    if (geoResponse.ok) {
+      const geoData = await geoResponse.json();
+      if (geoData.length > 0) {
+        const city = geoData[0].name || geoData[0].local_names?.th || 'Unknown';
+        const country = geoData[0].country || '';
+        location = `${city}, ${country}`;
+      }
+    }
+
+    const pm25 = pollutionData.list[0].components.pm2_5;
+    const timestamp = new Date(pollutionData.list[0].dt * 1000).toISOString();
     
     return new Response(
       JSON.stringify({
-        pm25: current.pollution.aqius,
-        location: `${data.data.city}, ${data.data.country}`,
-        timestamp: current.pollution.ts,
-        temperature: current.weather.tp,
-        humidity: current.weather.hu,
+        pm25: Math.round(pm25),
+        location,
+        timestamp,
+        temperature,
+        humidity,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
