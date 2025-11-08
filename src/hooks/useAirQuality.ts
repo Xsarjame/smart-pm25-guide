@@ -17,6 +17,38 @@ export const useAirQuality = () => {
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
+  const requestLocationPermission = async () => {
+    try {
+      const permission = await Geolocation.checkPermissions();
+      
+      if (permission.location === 'denied') {
+        toast({
+          title: 'ไม่สามารถเข้าถึงตำแหน่งได้',
+          description: 'กรุณาเปิดการอนุญาตเข้าถึงตำแหน่งในการตั้งค่าของแอป',
+          variant: 'destructive',
+        });
+        return false;
+      }
+      
+      if (permission.location !== 'granted') {
+        const requested = await Geolocation.requestPermissions();
+        if (requested.location !== 'granted') {
+          toast({
+            title: 'จำเป็นต้องใช้สิทธิ์เข้าถึงตำแหน่ง',
+            description: 'แอปต้องการสิทธิ์เข้าถึงตำแหน่งเพื่อแสดงข้อมูลคุณภาพอากาศในพื้นที่ของคุณ',
+            variant: 'destructive',
+          });
+          return false;
+        }
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Error requesting location permission:', error);
+      return false;
+    }
+  };
+
   const requestNotificationPermission = async () => {
     const permission = await LocalNotifications.requestPermissions();
     return permission.display === 'granted';
@@ -55,9 +87,24 @@ export const useAirQuality = () => {
   const fetchAirQuality = async () => {
     setLoading(true);
     try {
+      // Request location permission first
+      const hasPermission = await requestLocationPermission();
+      if (!hasPermission) {
+        setLoading(false);
+        return;
+      }
+
+      // Get current position with proper mobile settings
       const position = await Geolocation.getCurrentPosition({
         enableHighAccuracy: true,
-        timeout: 10000
+        timeout: 15000, // Increased timeout for mobile
+        maximumAge: 30000 // Allow cached position up to 30 seconds old
+      });
+
+      console.log('Location obtained:', {
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
+        accuracy: position.coords.accuracy
       });
 
       const { data: functionData, error } = await supabase.functions.invoke('get-air-quality', {
@@ -67,30 +114,53 @@ export const useAirQuality = () => {
         }
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Edge function error:', error);
+        throw error;
+      }
+
+      if (!functionData || !functionData.pm25) {
+        throw new Error('Invalid data received from server');
+      }
 
       setData(functionData);
 
       // Check for health profile and send notification if needed
       const profileStr = localStorage.getItem('healthProfile');
       if (profileStr) {
-        const profile = JSON.parse(profileStr);
-        await sendNotification(
-          functionData.pm25,
-          functionData.location,
-          profile.conditions && profile.conditions.length > 0
-        );
+        try {
+          const profile = JSON.parse(profileStr);
+          await sendNotification(
+            functionData.pm25,
+            functionData.location,
+            profile.conditions && profile.conditions.length > 0
+          );
+        } catch (notifError) {
+          console.error('Notification error:', notifError);
+          // Don't fail the whole operation if notification fails
+        }
       }
 
       toast({
         title: 'อัปเดตข้อมูลสำเร็จ',
         description: `PM2.5: ${functionData.pm25} µg/m³ ที่ ${functionData.location}`,
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching air quality:', error);
+      
+      let errorMessage = 'ไม่สามารถดึงข้อมูลคุณภาพอากาศได้';
+      
+      if (error.message?.includes('location')) {
+        errorMessage = 'ไม่สามารถระบุตำแหน่งของคุณได้ กรุณาตรวจสอบการตั้งค่า GPS';
+      } else if (error.message?.includes('timeout')) {
+        errorMessage = 'หมดเวลาในการรับตำแหน่ง กรุณาลองใหม่อีกครั้ง';
+      } else if (error.message?.includes('network') || error.message?.includes('fetch')) {
+        errorMessage = 'ไม่สามารถเชื่อมต่ออินเทอร์เน็ตได้ กรุณาตรวจสอบการเชื่อมต่อ';
+      }
+      
       toast({
         title: 'เกิดข้อผิดพลาด',
-        description: 'ไม่สามารถดึงข้อมูลคุณภาพอากาศได้ กรุณาลองใหม่อีกครั้ง',
+        description: errorMessage,
         variant: 'destructive',
       });
     } finally {
