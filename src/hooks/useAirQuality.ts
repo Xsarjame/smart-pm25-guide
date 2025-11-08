@@ -50,15 +50,42 @@ export const useAirQuality = () => {
   };
 
   const requestNotificationPermission = async () => {
-    const permission = await LocalNotifications.requestPermissions();
-    return permission.display === 'granted';
+    try {
+      const currentPermission = await LocalNotifications.checkPermissions();
+      
+      if (currentPermission.display === 'denied') {
+        toast({
+          title: 'ไม่สามารถส่งการแจ้งเตือนได้',
+          description: 'กรุณาเปิดการอนุญาตการแจ้งเตือนในการตั้งค่าของแอป',
+          variant: 'destructive',
+        });
+        return false;
+      }
+      
+      if (currentPermission.display !== 'granted') {
+        const permission = await LocalNotifications.requestPermissions();
+        if (permission.display !== 'granted') {
+          toast({
+            title: 'จำเป็นต้องใช้สิทธิ์การแจ้งเตือน',
+            description: 'แอปต้องการสิทธิ์การแจ้งเตือนเพื่อเตือนเมื่อค่า PM2.5 สูง',
+          });
+          return false;
+        }
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Error requesting notification permission:', error);
+      return false;
+    }
   };
 
   const sendNotification = async (pm25: number, location: string, hasHealthConditions: boolean) => {
     if (pm25 <= 37) return;
 
-    const hasPermission = await requestNotificationPermission();
-    if (!hasPermission) return;
+    // Check if we have permission (don't request again, already requested on app start)
+    const currentPermission = await LocalNotifications.checkPermissions();
+    if (currentPermission.display !== 'granted') return;
 
     let title = 'แจ้งเตือน: ค่าฝุ่น PM2.5 สูง';
     let body = `พื้นที่ ${location} มีค่า PM2.5 อยู่ที่ ${pm25} µg/m³`;
@@ -168,8 +195,16 @@ export const useAirQuality = () => {
     }
   };
 
+  // Request permissions when app starts
   useEffect(() => {
-    fetchAirQuality();
+    const initializeApp = async () => {
+      // Request notification permission first
+      await requestNotificationPermission();
+      // Then fetch air quality (which will request location permission)
+      await fetchAirQuality();
+    };
+    
+    initializeApp();
   }, []);
 
   return {
