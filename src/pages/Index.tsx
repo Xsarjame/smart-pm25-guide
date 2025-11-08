@@ -5,16 +5,20 @@ import { HealthProfileDisplay } from "@/components/HealthProfileDisplay";
 import { HealthRecommendations } from "@/components/HealthRecommendations";
 import { AlertNotification } from "@/components/AlertNotification";
 import { NearbyHospitals } from "@/components/NearbyHospitals";
+import { AIHealthAdvice } from "@/components/AIHealthAdvice";
+import { RouteMap } from "@/components/RouteMap";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MapPin, RefreshCw, User, Hospital, Loader2 } from "lucide-react";
+import { MapPin, RefreshCw, User, Hospital, Loader2, Navigation } from "lucide-react";
 import heroImage from "@/assets/hero-clean-air.jpg";
 import { useAirQuality } from "@/hooks/useAirQuality";
+import { Geolocation } from '@capacitor/geolocation';
 
 const Index = () => {
   const { data, loading, refresh } = useAirQuality();
   const [userProfile, setUserProfile] = useState<UserHealthProfile | null>(null);
   const [showProfileForm, setShowProfileForm] = useState(false);
+  const [currentPosition, setCurrentPosition] = useState<{ lat: number; lng: number } | null>(null);
 
   useEffect(() => {
     const savedProfile = localStorage.getItem('healthProfile');
@@ -25,6 +29,20 @@ const Index = () => {
         console.error('Failed to load profile:', e);
       }
     }
+
+    // Get current position for map
+    const getCurrentPos = async () => {
+      try {
+        const position = await Geolocation.getCurrentPosition();
+        setCurrentPosition({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude
+        });
+      } catch (error) {
+        console.error('Error getting position:', error);
+      }
+    };
+    getCurrentPos();
   }, []);
 
   const handleSaveProfile = (profile: UserHealthProfile) => {
@@ -134,15 +152,28 @@ const Index = () => {
           </div>
         ) : null}
 
-        {/* Tabs for Recommendations and Hospitals */}
-        <Tabs defaultValue="recommendations" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="recommendations">คำแนะนำสุขภาพ</TabsTrigger>
+        {/* Tabs for AI, Recommendations, Hospitals, and Navigation */}
+        <Tabs defaultValue="ai-advice" className="w-full">
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="ai-advice">AI</TabsTrigger>
+            <TabsTrigger value="recommendations">คำแนะนำ</TabsTrigger>
             <TabsTrigger value="hospitals">
-              <Hospital className="w-4 h-4 mr-2" />
+              <Hospital className="w-4 h-4 mr-1" />
               โรงพยาบาล
             </TabsTrigger>
+            <TabsTrigger value="navigation">
+              <Navigation className="w-4 h-4 mr-1" />
+              นำทาง
+            </TabsTrigger>
           </TabsList>
+          <TabsContent value="ai-advice" className="mt-4">
+            <AIHealthAdvice
+              pm25={pm25Value}
+              temperature={data?.temperature || 0}
+              humidity={data?.humidity || 0}
+              healthConditions={userProfile?.conditions}
+            />
+          </TabsContent>
           <TabsContent value="recommendations" className="mt-4">
             <HealthRecommendations 
               pm25={pm25Value}
@@ -152,6 +183,19 @@ const Index = () => {
           </TabsContent>
           <TabsContent value="hospitals" className="mt-4">
             <NearbyHospitals />
+          </TabsContent>
+          <TabsContent value="navigation" className="mt-4">
+            {currentPosition ? (
+              <RouteMap 
+                currentLat={currentPosition.lat}
+                currentLng={currentPosition.lng}
+              />
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
+                กำลังโหลดตำแหน่ง...
+              </div>
+            )}
           </TabsContent>
         </Tabs>
 

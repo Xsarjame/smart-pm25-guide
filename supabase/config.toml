@@ -2,3 +2,9 @@ project_id = "midbxmdlenmscodbfydr"
 
 [functions.get-air-quality]
 verify_jwt = false
+
+[functions.ai-health-advice]
+verify_jwt = false
+
+[functions.get-route-pm25]
+verify_jwt = false
