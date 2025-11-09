@@ -20,25 +20,44 @@ serve(async (req) => {
     const AQICN_API_KEY = Deno.env.get('AQICN_API_KEY');
 
     if (!MAPBOX_API_KEY || !AQICN_API_KEY) {
+      console.error('Missing API keys:', { 
+        hasMapbox: !!MAPBOX_API_KEY, 
+        hasAqicn: !!AQICN_API_KEY 
+      });
       throw new Error('API keys not configured');
     }
 
     // If destination string is provided, geocode it first
     if (destination && !endLat && !endLng) {
+      console.log('Geocoding destination:', destination);
       const geocodeUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(destination)}.json?access_token=${MAPBOX_API_KEY}&country=th&limit=1`;
+      
       const geocodeResponse = await fetch(geocodeUrl);
+      const geocodeData = await geocodeResponse.json();
+      
+      console.log('Geocode response status:', geocodeResponse.status);
+      console.log('Geocode response data:', geocodeData);
       
       if (!geocodeResponse.ok) {
-        throw new Error('Failed to geocode destination');
+        console.error('Mapbox geocoding error:', geocodeData);
+        throw new Error(`Failed to geocode destination: ${geocodeData.message || 'Unknown error'}`);
       }
 
-      const geocodeData = await geocodeResponse.json();
       if (!geocodeData.features || geocodeData.features.length === 0) {
         throw new Error('ไม่พบสถานที่ที่ค้นหา');
       }
 
       [endLng, endLat] = geocodeData.features[0].center;
-      console.log('Geocoded destination:', { endLat, endLng, placeName: geocodeData.features[0].place_name });
+      console.log('Geocoded successfully:', { 
+        endLat, 
+        endLng, 
+        placeName: geocodeData.features[0].place_name 
+      });
+    }
+
+    // Validate coordinates
+    if (!endLat || !endLng || !startLat || !startLng) {
+      throw new Error('Missing required coordinates');
     }
 
     // Get multiple route alternatives from Mapbox
