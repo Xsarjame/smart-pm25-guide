@@ -25,23 +25,35 @@ export const RouteMap = ({ currentLat, currentLng }: { currentLat: number; curre
   useEffect(() => {
     if (!mapContainer.current || map.current) return;
 
-    // Note: Mapbox token is managed server-side for security
-    // Using a basic map style that doesn't require token for initial render
-    map.current = new mapboxgl.Map({
-      container: mapContainer.current,
-      style: 'mapbox://styles/mapbox/streets-v12',
-      center: [currentLng, currentLat],
-      zoom: 12,
-      accessToken: 'pk.eyJ1IjoibG92YWJsZS1kZW1vIiwiYSI6ImNtNGx5dmgzNjBjcWcyanM5a2o1MHI4eWMifQ.X6Z_xLaY7FNSdQkO_a7v7A', // Demo token for map display
-    });
+    // Initialize map without requiring client-side token
+    // All API calls are handled server-side for security
+    const initMap = async () => {
+      try {
+        map.current = new mapboxgl.Map({
+          container: mapContainer.current!,
+          style: {
+            version: 8,
+            sources: {},
+            layers: [],
+            glyphs: 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf'
+          },
+          center: [currentLng, currentLat],
+          zoom: 12,
+        });
 
-    map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
+        map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
 
-    // Add current location marker
-    new mapboxgl.Marker({ color: '#3b82f6' })
-      .setLngLat([currentLng, currentLat])
-      .setPopup(new mapboxgl.Popup().setHTML('<p>ตำแหน่งปัจจุบัน</p>'))
-      .addTo(map.current);
+        // Add current location marker
+        new mapboxgl.Marker({ color: '#3b82f6' })
+          .setLngLat([currentLng, currentLat])
+          .setPopup(new mapboxgl.Popup().setHTML('<p>ตำแหน่งปัจจุบัน</p>'))
+          .addTo(map.current);
+      } catch (error) {
+        console.error('Map initialization error:', error);
+      }
+    };
+
+    initMap();
 
     return () => {
       map.current?.remove();
