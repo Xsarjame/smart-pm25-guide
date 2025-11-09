@@ -5,9 +5,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { MapPin, Navigation, Loader2 } from 'lucide-react';
+import { MapPin, Navigation, Loader2, CheckCircle2 } from 'lucide-react';
 import { useRoutePM25, RouteWithPM25 } from '@/hooks/useRoutePM25';
 import { Badge } from '@/components/ui/badge';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_API_KEY || 'YOUR_MAPBOX_TOKEN';
 
@@ -17,6 +18,8 @@ export const RouteMap = ({ currentLat, currentLng }: { currentLat: number; curre
   const [destination, setDestination] = useState('');
   const [destLat, setDestLat] = useState<number | null>(null);
   const [destLng, setDestLng] = useState<number | null>(null);
+  const [selectedRouteIndex, setSelectedRouteIndex] = useState(0);
+  const [pm25Markers, setPm25Markers] = useState<mapboxgl.Marker[]>([]);
   const { routes, recommendedRoute, loading, analyzeRoutes } = useRoutePM25();
 
   useEffect(() => {
@@ -47,64 +50,28 @@ export const RouteMap = ({ currentLat, currentLng }: { currentLat: number; curre
   useEffect(() => {
     if (!map.current || routes.length === 0) return;
 
-    // Clear existing route layers
-    if (map.current.getLayer('route-recommended')) {
-      map.current.removeLayer('route-recommended');
-      map.current.removeSource('route-recommended');
-    }
-    if (map.current.getLayer('route-alternative')) {
-      map.current.removeLayer('route-alternative');
-      map.current.removeSource('route-alternative');
-    }
+    // Clear existing route layers and markers
+    routes.forEach((_, index) => {
+      if (map.current!.getLayer(`route-${index}`)) {
+        map.current!.removeLayer(`route-${index}`);
+        map.current!.removeSource(`route-${index}`);
+      }
+    });
 
-    // Add recommended route (green/yellow/red based on PM2.5)
-    if (recommendedRoute) {
-      const color = recommendedRoute.averagePM25 > 50 ? '#ef4444' : 
-                    recommendedRoute.averagePM25 > 37 ? '#f59e0b' : '#10b981';
+    // Clear PM2.5 markers
+    pm25Markers.forEach(marker => marker.remove());
+    setPm25Markers([]);
+
+    const selectedRoute = routes[selectedRouteIndex];
+    const newMarkers: mapboxgl.Marker[] = [];
+
+    // Add all routes to map
+    routes.forEach((route, index) => {
+      const isSelected = index === selectedRouteIndex;
+      const color = route.averagePM25 > 50 ? '#ef4444' : 
+                    route.averagePM25 > 37 ? '#f59e0b' : '#10b981';
       
-      map.current.addSource('route-recommended', {
-        type: 'geojson',
-        data: {
-          type: 'Feature',
-          properties: {},
-          geometry: recommendedRoute.geometry,
-        },
-      });
-
-      map.current.addLayer({
-        id: 'route-recommended',
-        type: 'line',
-        source: 'route-recommended',
-        layout: {
-          'line-join': 'round',
-          'line-cap': 'round',
-        },
-        paint: {
-          'line-color': color,
-          'line-width': 5,
-        },
-      });
-
-      // Add destination marker
-      const destCoords = recommendedRoute.geometry.coordinates[
-        recommendedRoute.geometry.coordinates.length - 1
-      ];
-      new mapboxgl.Marker({ color: '#ef4444' })
-        .setLngLat(destCoords)
-        .setPopup(new mapboxgl.Popup().setHTML('<p>จุดหมาย</p>'))
-        .addTo(map.current);
-
-      // Fit bounds to show entire route
-      const bounds = new mapboxgl.LngLatBounds();
-      recommendedRoute.geometry.coordinates.forEach((coord: number[]) => {
-        bounds.extend(coord as [number, number]);
-      });
-      map.current.fitBounds(bounds, { padding: 50 });
-    }
-
-    // Add alternative routes (lighter color)
-    routes.slice(1).forEach((route, index) => {
-      map.current!.addSource(`route-alt-${index}`, {
+      map.current!.addSource(`route-${index}`, {
         type: 'geojson',
         data: {
           type: 'Feature',
@@ -114,21 +81,78 @@ export const RouteMap = ({ currentLat, currentLng }: { currentLat: number; curre
       });
 
       map.current!.addLayer({
-        id: `route-alt-${index}`,
+        id: `route-${index}`,
         type: 'line',
-        source: `route-alt-${index}`,
+        source: `route-${index}`,
         layout: {
           'line-join': 'round',
           'line-cap': 'round',
         },
         paint: {
-          'line-color': '#94a3b8',
-          'line-width': 3,
-          'line-opacity': 0.5,
+          'line-color': isSelected ? color : '#94a3b8',
+          'line-width': isSelected ? 5 : 3,
+          'line-opacity': isSelected ? 1 : 0.4,
         },
       });
     });
-  }, [routes, recommendedRoute]);
+
+    // Add PM2.5 sample markers for selected route
+    if (selectedRoute) {
+      selectedRoute.sampleLocations.forEach((location, index) => {
+        const pm25Value = selectedRoute.pm25Samples[index];
+        if (pm25Value !== undefined) {
+          const color = pm25Value > 50 ? '#ef4444' : 
+                       pm25Value > 37 ? '#f59e0b' : '#10b981';
+          
+          const el = document.createElement('div');
+          el.className = 'pm25-marker';
+          el.style.cssText = `
+            background-color: ${color};
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            border: 2px solid white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: bold;
+            color: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+          `;
+          el.textContent = pm25Value.toString();
+
+          const marker = new mapboxgl.Marker(el)
+            .setLngLat(location as [number, number])
+            .setPopup(
+              new mapboxgl.Popup({ offset: 25 })
+                .setHTML(`<p>PM2.5: ${pm25Value} µg/m³</p>`)
+            )
+            .addTo(map.current!);
+          
+          newMarkers.push(marker);
+        }
+      });
+      setPm25Markers(newMarkers);
+
+      // Add destination marker
+      const destCoords = selectedRoute.geometry.coordinates[
+        selectedRoute.geometry.coordinates.length - 1
+      ];
+      const destMarker = new mapboxgl.Marker({ color: '#ef4444' })
+        .setLngLat(destCoords)
+        .setPopup(new mapboxgl.Popup().setHTML('<p>จุดหมาย</p>'))
+        .addTo(map.current!);
+      newMarkers.push(destMarker);
+
+      // Fit bounds to show entire route
+      const bounds = new mapboxgl.LngLatBounds();
+      selectedRoute.geometry.coordinates.forEach((coord: number[]) => {
+        bounds.extend(coord as [number, number]);
+      });
+      map.current!.fitBounds(bounds, { padding: 50 });
+    }
+  }, [routes, selectedRouteIndex]);
 
   const handleSearchDestination = async () => {
     if (!destination) return;
@@ -152,6 +176,9 @@ export const RouteMap = ({ currentLat, currentLng }: { currentLat: number; curre
           endLat: lat,
           endLng: lng,
         });
+        
+        // Reset to recommended route (index 0)
+        setSelectedRouteIndex(0);
       }
     } catch (error) {
       console.error('Error geocoding:', error);
@@ -204,40 +231,90 @@ export const RouteMap = ({ currentLat, currentLng }: { currentLat: number; curre
 
         <div ref={mapContainer} className="h-[400px] rounded-lg" />
 
-        {recommendedRoute && (
-          <div className="space-y-3">
-            <div className="p-3 bg-muted rounded-lg space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">เส้นทางแนะนำ (PM2.5 ต่ำสุด)</span>
-                <Badge variant={getPM25Variant(recommendedRoute.averagePM25)}>
-                  {getPM25Label(recommendedRoute.averagePM25)}
-                </Badge>
-              </div>
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div>
-                  <span className="text-muted-foreground">ระยะทาง:</span>{' '}
-                  <span className="font-medium">{(recommendedRoute.distance / 1000).toFixed(1)} km</span>
+        {routes.length > 0 && (
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">เลือกเส้นทาง ({routes.length} เส้นทาง)</Label>
+              <RadioGroup value={selectedRouteIndex.toString()} onValueChange={(val) => setSelectedRouteIndex(parseInt(val))}>
+                {routes.map((route, index) => {
+                  const isRecommended = index === 0;
+                  return (
+                    <div 
+                      key={index}
+                      className={`flex items-start gap-3 p-3 rounded-lg border-2 transition-all cursor-pointer ${
+                        selectedRouteIndex === index 
+                          ? 'border-primary bg-primary/5' 
+                          : 'border-border hover:border-primary/50'
+                      }`}
+                      onClick={() => setSelectedRouteIndex(index)}
+                    >
+                      <RadioGroupItem value={index.toString()} id={`route-${index}`} className="mt-1" />
+                      <div className="flex-1 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Label htmlFor={`route-${index}`} className="flex items-center gap-2 cursor-pointer">
+                            <span className="font-medium">เส้นทางที่ {index + 1}</span>
+                            {isRecommended && (
+                              <Badge variant="default" className="text-xs">
+                                <CheckCircle2 className="h-3 w-3 mr-1" />
+                                แนะนำ
+                              </Badge>
+                            )}
+                          </Label>
+                          <Badge variant={getPM25Variant(route.averagePM25)}>
+                            {getPM25Label(route.averagePM25)}
+                          </Badge>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div className="flex items-center gap-1">
+                            <span className="text-muted-foreground">ระยะทาง:</span>
+                            <span className="font-medium">{(route.distance / 1000).toFixed(1)} km</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className="text-muted-foreground">เวลา:</span>
+                            <span className="font-medium">{Math.round(route.duration / 60)} นาที</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className="text-muted-foreground">PM2.5 เฉลี่ย:</span>
+                            <span className={`font-medium ${
+                              route.averagePM25 > 50 ? 'text-destructive' : 
+                              route.averagePM25 > 37 ? 'text-orange-500' : 'text-green-500'
+                            }`}>
+                              {route.averagePM25} µg/m³
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <span className="text-muted-foreground">PM2.5 สูงสุด:</span>
+                            <span className="font-medium">{route.maxPM25} µg/m³</span>
+                          </div>
+                        </div>
+
+                        {isRecommended && (
+                          <div className="text-xs text-muted-foreground">
+                            เส้นทางที่ปลอดภัยที่สุดสำหรับสุขภาพ
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </RadioGroup>
+            </div>
+
+            <div className="p-3 bg-muted/50 rounded-lg">
+              <div className="text-xs space-y-1">
+                <div className="font-medium">ข้อมูลแบบ Real-time</div>
+                <div className="text-muted-foreground">
+                  • ค่า PM2.5 วัดจากสถานีตรวจวัดคุณภาพอากาศใกล้เคียงตามเส้นทาง
                 </div>
-                <div>
-                  <span className="text-muted-foreground">เวลา:</span>{' '}
-                  <span className="font-medium">{Math.round(recommendedRoute.duration / 60)} นาที</span>
+                <div className="text-muted-foreground">
+                  • จุดสีบนแผนที่แสดงค่า PM2.5 ตามจุดต่างๆ ตลอดเส้นทาง
                 </div>
-                <div>
-                  <span className="text-muted-foreground">PM2.5 เฉลี่ย:</span>{' '}
-                  <span className="font-medium">{recommendedRoute.averagePM25} µg/m³</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">PM2.5 สูงสุด:</span>{' '}
-                  <span className="font-medium">{recommendedRoute.maxPM25} µg/m³</span>
+                <div className="text-muted-foreground">
+                  • เส้นทางแนะนำเลือกจากค่า PM2.5 เฉลี่ยต่ำสุด
                 </div>
               </div>
             </div>
-
-            {routes.length > 1 && (
-              <div className="text-xs text-muted-foreground">
-                พบ {routes.length} เส้นทาง - แสดงเส้นทางที่มี PM2.5 ต่ำที่สุด
-              </div>
-            )}
           </div>
         )}
       </CardContent>
