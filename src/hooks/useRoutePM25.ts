@@ -16,8 +16,9 @@ export interface RouteWithPM25 {
 interface RouteParams {
   startLat: number;
   startLng: number;
-  endLat: number;
-  endLng: number;
+  endLat?: number;
+  endLng?: number;
+  destination?: string;
 }
 
 export const useRoutePM25 = () => {

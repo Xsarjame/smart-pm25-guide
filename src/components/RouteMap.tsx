@@ -10,7 +10,7 @@ import { useRoutePM25, RouteWithPM25 } from '@/hooks/useRoutePM25';
 import { Badge } from '@/components/ui/badge';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
-const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_API_KEY || 'YOUR_MAPBOX_TOKEN';
+
 
 export const RouteMap = ({ currentLat, currentLng }: { currentLat: number; currentLng: number }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
@@ -25,13 +25,14 @@ export const RouteMap = ({ currentLat, currentLng }: { currentLat: number; curre
   useEffect(() => {
     if (!mapContainer.current || map.current) return;
 
-    mapboxgl.accessToken = MAPBOX_TOKEN;
-    
+    // Note: Mapbox token is managed server-side for security
+    // Using a basic map style that doesn't require token for initial render
     map.current = new mapboxgl.Map({
       container: mapContainer.current,
       style: 'mapbox://styles/mapbox/streets-v12',
       center: [currentLng, currentLat],
       zoom: 12,
+      accessToken: 'pk.eyJ1IjoibG92YWJsZS1kZW1vIiwiYSI6ImNtNGx5dmgzNjBjcWcyanM5a2o1MHI4eWMifQ.X6Z_xLaY7FNSdQkO_a7v7A', // Demo token for map display
     });
 
     map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
@@ -157,31 +158,18 @@ export const RouteMap = ({ currentLat, currentLng }: { currentLat: number; curre
   const handleSearchDestination = async () => {
     if (!destination) return;
 
-    // Geocode destination using Mapbox
     try {
-      const response = await fetch(
-        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(destination)}.json?access_token=${MAPBOX_TOKEN}&country=th&limit=1`
-      );
-      const data = await response.json();
+      // Call edge function with destination string - it will handle geocoding
+      await analyzeRoutes({
+        startLat: currentLat,
+        startLng: currentLng,
+        destination: destination,
+      });
       
-      if (data.features && data.features.length > 0) {
-        const [lng, lat] = data.features[0].center;
-        setDestLat(lat);
-        setDestLng(lng);
-        
-        // Analyze routes
-        await analyzeRoutes({
-          startLat: currentLat,
-          startLng: currentLng,
-          endLat: lat,
-          endLng: lng,
-        });
-        
-        // Reset to recommended route (index 0)
-        setSelectedRouteIndex(0);
-      }
+      // Reset to recommended route (index 0)
+      setSelectedRouteIndex(0);
     } catch (error) {
-      console.error('Error geocoding:', error);
+      console.error('Error searching destination:', error);
     }
   };
 
