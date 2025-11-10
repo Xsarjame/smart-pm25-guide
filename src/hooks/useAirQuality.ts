@@ -195,7 +195,7 @@ export const useAirQuality = () => {
     }
   };
 
-  // Request permissions when app starts
+  // Request permissions when app starts and set up auto-refresh
   useEffect(() => {
     const initializeApp = async () => {
       // Request notification permission first
@@ -205,6 +205,15 @@ export const useAirQuality = () => {
     };
     
     initializeApp();
+
+    // Auto-refresh every 5 minutes (300,000 ms)
+    const intervalId = setInterval(() => {
+      fetchAirQuality();
+    }, 300000);
+
+    return () => {
+      clearInterval(intervalId);
+    };
   }, []);
 
   return {

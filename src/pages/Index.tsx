@@ -201,7 +201,7 @@ const Index = () => {
 
         {/* Info Footer */}
         <div className="text-center text-sm text-muted-foreground py-4">
-          <p>ข้อมูลอัพเดททุก 1 ชั่วโมง</p>
+          <p>ข้อมูลอัพเดทอัตโนมัติทุก 5 นาที</p>
           <p className="text-xs mt-1">
             แหล่งข้อมูล: กรมควบคุมมลพิษ
           </p>
