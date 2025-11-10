@@ -12,7 +12,12 @@ serve(async (req) => {
 
   try {
     const { latitude, longitude } = await req.json();
-    const OWM_API_KEY = "02fd0de6806fb924f7435400842d68a0";
+    const OWM_API_KEY = Deno.env.get('OPENWEATHER_API_KEY');
+
+    if (!OWM_API_KEY) {
+      console.error('OPENWEATHER_API_KEY is not configured');
+      throw new Error('OPENWEATHER_API_KEY is not configured');
+    }
 
     console.log('Fetching air quality data for:', { latitude, longitude });
 
