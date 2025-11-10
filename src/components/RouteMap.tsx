@@ -289,6 +289,12 @@ export const RouteMap = ({ currentLat, currentLng }: { currentLat: number; curre
                           </div>
                         </div>
 
+                        <div className={`text-xs font-medium ${
+                          route.averagePM25 > 50 ? 'text-destructive' : 'text-green-600'
+                        }`}>
+                          {route.healthAlert}
+                        </div>
+
                         {isRecommended && (
                           <div className="text-xs text-muted-foreground">
                             เส้นทางที่ปลอดภัยที่สุดสำหรับสุขภาพ

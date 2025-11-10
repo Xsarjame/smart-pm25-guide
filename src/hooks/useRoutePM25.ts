@@ -9,6 +9,7 @@ export interface RouteWithPM25 {
   duration: number;
   averagePM25: number;
   maxPM25: number;
+  healthAlert: string;
   pm25Samples: number[];
   sampleLocations: number[][];
 }

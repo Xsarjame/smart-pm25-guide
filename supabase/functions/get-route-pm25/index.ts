@@ -17,14 +17,13 @@ serve(async (req) => {
     console.log('Route PM2.5 request:', { startLat, startLng, endLat, endLng, destination });
 
     const MAPBOX_API_KEY = Deno.env.get('MAPBOX_API_KEY');
-    const AQICN_API_KEY = Deno.env.get('AQICN_API_KEY');
+    const OWM_API_KEY = "02fd0de6806fb924f7435400842d68a0";
 
-    if (!MAPBOX_API_KEY || !AQICN_API_KEY) {
+    if (!MAPBOX_API_KEY) {
       console.error('Missing API keys:', { 
-        hasMapbox: !!MAPBOX_API_KEY, 
-        hasAqicn: !!AQICN_API_KEY 
+        hasMapbox: !!MAPBOX_API_KEY
       });
-      throw new Error('API keys not configured');
+      throw new Error('MAPBOX_API_KEY not configured');
     }
 
     // If destination string is provided, geocode it first
@@ -94,16 +93,22 @@ serve(async (req) => {
           samplePoints.push(coordinates[coordIndex]);
         }
 
-        // Get PM2.5 data for each sample point
+        // Get PM2.5 data for each sample point using OpenWeatherMap
         const pm25Values = await Promise.all(
           samplePoints.map(async ([lng, lat]) => {
             try {
-              const aqicnUrl = `https://api.waqi.info/feed/geo:${lat};${lng}/?token=${AQICN_API_KEY}`;
-              const response = await fetch(aqicnUrl);
+              const owmUrl = `https://api.openweathermap.org/data/2.5/air_pollution?lat=${lat}&lon=${lng}&appid=${OWM_API_KEY}`;
+              const response = await fetch(owmUrl);
+              
+              if (!response.ok) {
+                console.error(`OpenWeatherMap error for ${lat},${lng}:`, response.status);
+                return null;
+              }
+              
               const data = await response.json();
               
-              if (data.status === 'ok' && data.data?.iaqi?.pm25?.v) {
-                return data.data.iaqi.pm25.v;
+              if (data.list && data.list.length > 0 && data.list[0].components?.pm2_5) {
+                return data.list[0].components.pm2_5;
               }
               return null;
             } catch (error) {
@@ -121,6 +126,12 @@ serve(async (req) => {
         
         const maxPM25 = validPM25.length > 0 ? Math.max(...validPM25) : 0;
 
+        // Health alert based on PM2.5 levels
+        let healthAlert = "เส้นทางนี้ปลอดภัย";
+        if (avgPM25 > 50) {
+          healthAlert = "หลีกเลี่ยงเส้นทางนี้ ค่าฝุ่นสูง";
+        }
+
         return {
           routeIndex: index,
           geometry: route.geometry,
@@ -128,6 +139,7 @@ serve(async (req) => {
           duration: route.duration,
           averagePM25: Math.round(avgPM25),
           maxPM25: Math.round(maxPM25),
+          healthAlert: healthAlert,
           pm25Samples: pm25Values.filter(v => v !== null).map(v => Math.round(v as number)),
           sampleLocations: samplePoints,
         };
