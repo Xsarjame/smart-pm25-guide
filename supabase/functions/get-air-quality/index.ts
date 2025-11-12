@@ -12,38 +12,31 @@ serve(async (req) => {
 
   try {
     const { latitude, longitude } = await req.json();
-    const OWM_API_KEY = Deno.env.get('OPENWEATHERMAP_API_KEY');
-
-    if (!OWM_API_KEY) {
-      throw new Error('OPENWEATHERMAP_API_KEY is not configured');
-    }
 
     console.log('Fetching air quality data for:', { latitude, longitude });
 
-    // Fetch air quality data from OpenWeatherMap
-    const owmUrl = `https://api.openweathermap.org/data/2.5/air_pollution?lat=${latitude}&lon=${longitude}&appid=${OWM_API_KEY}`;
-    const owmResponse = await fetch(owmUrl);
+    // Fetch air quality data from Open-Meteo (no API key required)
+    const airQualityUrl = `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${latitude}&longitude=${longitude}&current=pm10,pm2_5&timezone=auto&domains=cams_global`;
+    const airQualityResponse = await fetch(airQualityUrl);
 
-    if (!owmResponse.ok) {
-      const errorText = await owmResponse.text();
-      console.error('OpenWeatherMap API error:', owmResponse.status, errorText);
-      throw new Error(`OpenWeatherMap API error: ${owmResponse.status}`);
+    if (!airQualityResponse.ok) {
+      const errorText = await airQualityResponse.text();
+      console.error('Open-Meteo Air Quality API error:', airQualityResponse.status, errorText);
+      throw new Error(`Open-Meteo Air Quality API error: ${airQualityResponse.status}`);
     }
 
-    const owmData = await owmResponse.json();
-    console.log('OpenWeatherMap data received:', owmData);
+    const airQualityData = await airQualityResponse.json();
+    console.log('Open-Meteo air quality data received:', airQualityData);
 
-    if (!owmData.list || owmData.list.length === 0) {
+    if (!airQualityData.current) {
       throw new Error('No air quality data available');
     }
-
-    const airData = owmData.list[0];
     
-    // Extract PM2.5 from OpenWeatherMap data
-    const pm25 = airData.components?.pm2_5 || 0;
+    // Extract PM2.5 from Open-Meteo data
+    const pm25 = airQualityData.current.pm2_5 || 0;
     
-    // Fetch weather data for temperature and humidity
-    const weatherUrl = `https://api.openweathermap.org/data/2.5/weather?lat=${latitude}&lon=${longitude}&appid=${OWM_API_KEY}&units=metric`;
+    // Fetch weather data from Open-Meteo for temperature and humidity
+    const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m&timezone=auto`;
     const weatherResponse = await fetch(weatherUrl);
     
     let temperature = 25;
@@ -52,9 +45,22 @@ serve(async (req) => {
     
     if (weatherResponse.ok) {
       const weatherData = await weatherResponse.json();
-      temperature = Math.round(weatherData.main?.temp || 25);
-      humidity = Math.round(weatherData.main?.humidity || 60);
-      location = weatherData.name || location;
+      temperature = Math.round(weatherData.current?.temperature_2m || 25);
+      humidity = Math.round(weatherData.current?.relative_humidity_2m || 60);
+    }
+    
+    // Try to get location name using reverse geocoding (optional)
+    try {
+      const geocodeUrl = `https://geocoding-api.open-meteo.com/v1/search?latitude=${latitude}&longitude=${longitude}&count=1`;
+      const geocodeResponse = await fetch(geocodeUrl);
+      if (geocodeResponse.ok) {
+        const geocodeData = await geocodeResponse.json();
+        if (geocodeData.results && geocodeData.results.length > 0) {
+          location = geocodeData.results[0].name || location;
+        }
+      }
+    } catch (error) {
+      console.log('Geocoding optional, skipping:', error);
     }
     
     const timestamp = new Date().toISOString();

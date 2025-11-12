@@ -17,14 +17,10 @@ serve(async (req) => {
     console.log('Route PM2.5 request:', { startLat, startLng, endLat, endLng, destination });
 
     const MAPBOX_API_KEY = Deno.env.get('MAPBOX_API_KEY');
-    const OWM_API_KEY = Deno.env.get('OPENWEATHERMAP_API_KEY');
 
-    if (!MAPBOX_API_KEY || !OWM_API_KEY) {
-      console.error('Missing API keys:', { 
-        hasMapbox: !!MAPBOX_API_KEY,
-        hasOwm: !!OWM_API_KEY
-      });
-      throw new Error('Required API keys not configured');
+    if (!MAPBOX_API_KEY) {
+      console.error('Missing MAPBOX_API_KEY');
+      throw new Error('MAPBOX_API_KEY not configured');
     }
 
     // If destination string is provided, geocode it first
@@ -94,22 +90,22 @@ serve(async (req) => {
           samplePoints.push(coordinates[coordIndex]);
         }
 
-        // Get PM2.5 data for each sample point using OpenWeatherMap
+        // Get PM2.5 data for each sample point using Open-Meteo (no API key required)
         const pm25Values = await Promise.all(
           samplePoints.map(async ([lng, lat]) => {
             try {
-              const owmUrl = `https://api.openweathermap.org/data/2.5/air_pollution?lat=${lat}&lon=${lng}&appid=${OWM_API_KEY}`;
-              const response = await fetch(owmUrl);
+              const openMeteoUrl = `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lng}&current=pm2_5&timezone=auto&domains=cams_global`;
+              const response = await fetch(openMeteoUrl);
               
               if (!response.ok) {
-                console.error(`OpenWeatherMap error for ${lat},${lng}:`, response.status);
+                console.error(`Open-Meteo error for ${lat},${lng}:`, response.status);
                 return null;
               }
               
               const data = await response.json();
               
-              if (data.list && data.list.length > 0 && data.list[0].components?.pm2_5) {
-                return data.list[0].components.pm2_5;
+              if (data.current?.pm2_5 !== undefined) {
+                return data.current.pm2_5;
               }
               return null;
             } catch (error) {
