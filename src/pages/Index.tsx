@@ -6,7 +6,7 @@ import { HealthRecommendations } from "@/components/HealthRecommendations";
 import { AlertNotification } from "@/components/AlertNotification";
 import { NearbyHospitals } from "@/components/NearbyHospitals";
 import { AIHealthAdvice } from "@/components/AIHealthAdvice";
-import { RouteMap } from "@/components/RouteMap";
+import { RouteMapLeaflet } from "@/components/RouteMapLeaflet";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MapPin, RefreshCw, User, Hospital, Loader2, Navigation } from "lucide-react";
@@ -186,7 +186,7 @@ const Index = () => {
           </TabsContent>
           <TabsContent value="navigation" className="mt-4">
             {currentPosition ? (
-              <RouteMap 
+              <RouteMapLeaflet 
                 currentLat={currentPosition.lat}
                 currentLng={currentPosition.lng}
               />
@@ -203,7 +203,10 @@ const Index = () => {
         <div className="text-center text-sm text-muted-foreground py-4">
           <p>ข้อมูลอัพเดทอัตโนมัติทุก 5 นาที</p>
           <p className="text-xs mt-1">
-            แหล่งข้อมูล: กรมควบคุมมลพิษ
+            แหล่งข้อมูล PM2.5: Open-Meteo Air Quality API (CAMS Global)
+          </p>
+          <p className="text-xs">
+            แผนที่: OpenStreetMap Contributors
           </p>
         </div>
       </div>
