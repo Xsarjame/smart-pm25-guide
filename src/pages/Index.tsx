@@ -6,7 +6,7 @@ import { HealthRecommendations } from "@/components/HealthRecommendations";
 import { AlertNotification } from "@/components/AlertNotification";
 import { NearbyHospitals } from "@/components/NearbyHospitals";
 import { AIHealthAdvice } from "@/components/AIHealthAdvice";
-import { RouteMapLeaflet } from "@/components/RouteMapLeaflet";
+import { RouteMapSimple } from "@/components/RouteMapSimple";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MapPin, RefreshCw, User, Hospital, Loader2, Navigation } from "lucide-react";
@@ -186,7 +186,7 @@ const Index = () => {
           </TabsContent>
           <TabsContent value="navigation" className="mt-4">
             {currentPosition ? (
-              <RouteMapLeaflet 
+              <RouteMapSimple 
                 currentLat={currentPosition.lat}
                 currentLng={currentPosition.lng}
               />
