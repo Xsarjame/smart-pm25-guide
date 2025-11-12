@@ -17,13 +17,14 @@ serve(async (req) => {
     console.log('Route PM2.5 request:', { startLat, startLng, endLat, endLng, destination });
 
     const MAPBOX_API_KEY = Deno.env.get('MAPBOX_API_KEY');
-    const OWM_API_KEY = "02fd0de6806fb924f7435400842d68a0";
+    const OWM_API_KEY = Deno.env.get('OPENWEATHERMAP_API_KEY');
 
-    if (!MAPBOX_API_KEY) {
+    if (!MAPBOX_API_KEY || !OWM_API_KEY) {
       console.error('Missing API keys:', { 
-        hasMapbox: !!MAPBOX_API_KEY
+        hasMapbox: !!MAPBOX_API_KEY,
+        hasOwm: !!OWM_API_KEY
       });
-      throw new Error('MAPBOX_API_KEY not configured');
+      throw new Error('Required API keys not configured');
     }
 
     // If destination string is provided, geocode it first

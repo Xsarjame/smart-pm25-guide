@@ -12,50 +12,52 @@ serve(async (req) => {
 
   try {
     const { latitude, longitude } = await req.json();
-    const AQICN_API_KEY = Deno.env.get('AQICN_API_KEY');
+    const OWM_API_KEY = Deno.env.get('OPENWEATHERMAP_API_KEY');
 
-    if (!AQICN_API_KEY) {
-      throw new Error('AQICN_API_KEY is not configured');
+    if (!OWM_API_KEY) {
+      throw new Error('OPENWEATHERMAP_API_KEY is not configured');
     }
 
     console.log('Fetching air quality data for:', { latitude, longitude });
 
-    // Fetch air quality data from AQICN (World Air Quality Index)
-    const aqicnResponse = await fetch(
-      `https://api.waqi.info/feed/geo:${latitude};${longitude}/?token=${AQICN_API_KEY}`
-    );
+    // Fetch air quality data from OpenWeatherMap
+    const owmUrl = `https://api.openweathermap.org/data/2.5/air_pollution?lat=${latitude}&lon=${longitude}&appid=${OWM_API_KEY}`;
+    const owmResponse = await fetch(owmUrl);
 
-    if (!aqicnResponse.ok) {
-      const errorText = await aqicnResponse.text();
-      console.error('AQICN API error:', aqicnResponse.status, errorText);
-      throw new Error(`AQICN API error: ${aqicnResponse.status}`);
+    if (!owmResponse.ok) {
+      const errorText = await owmResponse.text();
+      console.error('OpenWeatherMap API error:', owmResponse.status, errorText);
+      throw new Error(`OpenWeatherMap API error: ${owmResponse.status}`);
     }
 
-    const aqicnData = await aqicnResponse.json();
-    console.log('AQICN data received:', aqicnData);
+    const owmData = await owmResponse.json();
+    console.log('OpenWeatherMap data received:', owmData);
 
-    if (aqicnData.status !== 'ok') {
-      throw new Error(`AQICN API error: ${aqicnData.data || 'Unknown error'}`);
+    if (!owmData.list || owmData.list.length === 0) {
+      throw new Error('No air quality data available');
     }
 
-    const { data } = aqicnData;
-
-    // Extract PM2.5 from AQICN data
-    const pm25 = data.iaqi?.pm25?.v || data.aqi || 0;
+    const airData = owmData.list[0];
     
-    // Extract location
-    const location = data.city?.name || 'Unknown Location';
+    // Extract PM2.5 from OpenWeatherMap data
+    const pm25 = airData.components?.pm2_5 || 0;
     
-    // Extract timestamp
-    const timestamp = data.time?.iso || new Date().toISOString();
-
-    // Get temperature and humidity from AQICN if available
-    let temperature = data.iaqi?.t?.v || 25;
-    let humidity = data.iaqi?.h?.v || 60;
-
-    // Round values
-    temperature = Math.round(temperature);
-    humidity = Math.round(humidity);
+    // Fetch weather data for temperature and humidity
+    const weatherUrl = `https://api.openweathermap.org/data/2.5/weather?lat=${latitude}&lon=${longitude}&appid=${OWM_API_KEY}&units=metric`;
+    const weatherResponse = await fetch(weatherUrl);
+    
+    let temperature = 25;
+    let humidity = 60;
+    let location = `${latitude.toFixed(2)}, ${longitude.toFixed(2)}`;
+    
+    if (weatherResponse.ok) {
+      const weatherData = await weatherResponse.json();
+      temperature = Math.round(weatherData.main?.temp || 25);
+      humidity = Math.round(weatherData.main?.humidity || 60);
+      location = weatherData.name || location;
+    }
+    
+    const timestamp = new Date().toISOString();
     
     return new Response(
       JSON.stringify({
