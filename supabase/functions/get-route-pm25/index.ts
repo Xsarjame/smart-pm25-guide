@@ -16,17 +16,12 @@ serve(async (req) => {
     
     console.log('Route PM2.5 request:', { startLat, startLng, endLat, endLng, destination });
 
-    const MAPBOX_API_KEY = Deno.env.get('MAPBOX_API_KEY');
-
-    if (!MAPBOX_API_KEY) {
-      console.error('Missing MAPBOX_API_KEY');
-      throw new Error('MAPBOX_API_KEY not configured');
-    }
+    // Using Open-Meteo Geocoding and OSRM routing - no API key required
 
     // If destination string is provided, geocode it first
     if (destination && !endLat && !endLng) {
-      console.log('Geocoding destination:', destination);
-      const geocodeUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(destination)}.json?access_token=${MAPBOX_API_KEY}&country=th&limit=1`;
+      console.log('Geocoding destination (Open-Meteo):', destination);
+      const geocodeUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(destination)}&count=1&language=th&format=json`;
       
       const geocodeResponse = await fetch(geocodeUrl);
       const geocodeData = await geocodeResponse.json();
@@ -35,19 +30,20 @@ serve(async (req) => {
       console.log('Geocode response data:', geocodeData);
       
       if (!geocodeResponse.ok) {
-        console.error('Mapbox geocoding error:', geocodeData);
-        throw new Error(`Failed to geocode destination: ${geocodeData.message || 'Unknown error'}`);
+        console.error('Open-Meteo geocoding error:', geocodeData);
+        throw new Error(`Failed to geocode destination: ${geocodeData.reason || 'Unknown error'}`);
       }
 
-      if (!geocodeData.features || geocodeData.features.length === 0) {
+      if (!geocodeData.results || geocodeData.results.length === 0) {
         throw new Error('ไม่พบสถานที่ที่ค้นหา');
       }
 
-      [endLng, endLat] = geocodeData.features[0].center;
+      endLat = geocodeData.results[0].latitude;
+      endLng = geocodeData.results[0].longitude;
       console.log('Geocoded successfully:', { 
         endLat, 
         endLng, 
-        placeName: geocodeData.features[0].place_name 
+        placeName: geocodeData.results[0].name 
       });
     }
 
@@ -56,18 +52,18 @@ serve(async (req) => {
       throw new Error('Missing required coordinates');
     }
 
-    // Get multiple route alternatives from Mapbox
-    const mapboxUrl = `https://api.mapbox.com/directions/v5/mapbox/driving/${startLng},${startLat};${endLng},${endLat}?alternatives=true&geometries=geojson&steps=true&access_token=${MAPBOX_API_KEY}`;
+    // Get multiple route alternatives from OSRM (public endpoint)
+    const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${startLng},${startLat};${endLng},${endLat}?alternatives=true&geometries=geojson&overview=full`;
     
-    const mapboxResponse = await fetch(mapboxUrl);
+    const osrmResponse = await fetch(osrmUrl);
     
-    if (!mapboxResponse.ok) {
-      console.error('Mapbox error:', await mapboxResponse.text());
-      throw new Error('Failed to get routes from Mapbox');
+    if (!osrmResponse.ok) {
+      console.error('OSRM error:', await osrmResponse.text());
+      throw new Error('Failed to get routes from OSRM');
     }
 
-    const mapboxData = await mapboxResponse.json();
-    const routes = mapboxData.routes || [];
+    const osrmData = await osrmResponse.json();
+    const routes = osrmData.routes || [];
 
     if (routes.length === 0) {
       throw new Error('No routes found');
