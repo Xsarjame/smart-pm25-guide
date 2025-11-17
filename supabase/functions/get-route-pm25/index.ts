@@ -52,21 +52,44 @@ serve(async (req) => {
       throw new Error('Missing required coordinates');
     }
 
+    // Validate coordinate ranges
+    if (startLat < -90 || startLat > 90 || endLat < -90 || endLat > 90) {
+      throw new Error('Invalid latitude values');
+    }
+    if (startLng < -180 || startLng > 180 || endLng < -180 || endLng > 180) {
+      throw new Error('Invalid longitude values');
+    }
+
     // Get multiple route alternatives from OSRM (public endpoint)
     const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${startLng},${startLat};${endLng},${endLat}?alternatives=true&geometries=geojson&overview=full`;
     
-    const osrmResponse = await fetch(osrmUrl);
+    let osrmResponse;
+    try {
+      osrmResponse = await fetch(osrmUrl, {
+        signal: AbortSignal.timeout(15000), // 15 second timeout
+      });
+    } catch (fetchError) {
+      console.error('OSRM fetch error:', fetchError);
+      throw new Error('ไม่สามารถเชื่อมต่อบริการหาเส้นทางได้ กรุณาลองใหม่');
+    }
     
     if (!osrmResponse.ok) {
-      console.error('OSRM error:', await osrmResponse.text());
-      throw new Error('Failed to get routes from OSRM');
+      const errorText = await osrmResponse.text();
+      console.error('OSRM error:', errorText);
+      throw new Error('ไม่สามารถค้นหาเส้นทางได้ กรุณาตรวจสอบตำแหน่ง');
     }
 
     const osrmData = await osrmResponse.json();
+    
+    if (osrmData.code !== 'Ok') {
+      console.error('OSRM routing error:', osrmData.message);
+      throw new Error('ไม่สามารถค้นหาเส้นทางได้: ' + (osrmData.message || 'Unknown error'));
+    }
+
     const routes = osrmData.routes || [];
 
     if (routes.length === 0) {
-      throw new Error('No routes found');
+      throw new Error('ไม่พบเส้นทางระหว่างจุดเริ่มต้นและปลายทาง');
     }
 
     // Analyze PM2.5 along each route
@@ -91,7 +114,9 @@ serve(async (req) => {
           samplePoints.map(async ([lng, lat]) => {
             try {
               const openMeteoUrl = `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lng}&current=pm2_5&timezone=auto&domains=cams_global`;
-              const response = await fetch(openMeteoUrl);
+              const response = await fetch(openMeteoUrl, {
+                signal: AbortSignal.timeout(10000), // 10 second timeout per request
+              });
               
               if (!response.ok) {
                 console.error(`Open-Meteo error for ${lat},${lng}:`, response.status);
@@ -100,8 +125,8 @@ serve(async (req) => {
               
               const data = await response.json();
               
-              if (data.current?.pm2_5 !== undefined) {
-                return data.current.pm2_5;
+              if (data.current?.pm2_5 !== undefined && data.current.pm2_5 !== null) {
+                return Math.max(0, data.current.pm2_5); // Ensure non-negative
               }
               return null;
             } catch (error) {
@@ -112,12 +137,26 @@ serve(async (req) => {
         );
 
         // Calculate average PM2.5 (excluding null values)
-        const validPM25 = pm25Values.filter(v => v !== null) as number[];
-        const avgPM25 = validPM25.length > 0 
-          ? validPM25.reduce((sum, val) => sum + val, 0) / validPM25.length 
-          : 0;
+        const validPM25 = pm25Values.filter(v => v !== null && !isNaN(v)) as number[];
         
-        const maxPM25 = validPM25.length > 0 ? Math.max(...validPM25) : 0;
+        if (validPM25.length === 0) {
+          console.warn(`No valid PM2.5 data for route ${index}`);
+          // Use a default moderate value if no data available
+          return {
+            routeIndex: index,
+            geometry: route.geometry,
+            distance: route.distance,
+            duration: route.duration,
+            averagePM25: 30, // Default moderate value
+            maxPM25: 30,
+            healthAlert: "ไม่มีข้อมูล PM2.5 ในเส้นทางนี้",
+            pm25Samples: [],
+            sampleLocations: samplePoints,
+          };
+        }
+
+        const avgPM25 = validPM25.reduce((sum, val) => sum + val, 0) / validPM25.length;
+        const maxPM25 = Math.max(...validPM25);
 
         // Health alert based on PM2.5 levels
         let healthAlert = "เส้นทางนี้ปลอดภัย";
