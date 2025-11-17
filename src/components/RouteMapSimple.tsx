@@ -112,19 +112,37 @@ export const RouteMapSimple = ({ currentLat, currentLng }: { currentLat: number;
   }, [routes, selectedRouteIndex]);
 
   const handleSearchDestination = async () => {
-    if (!destination.trim()) return;
+    const trimmedDest = destination.trim();
+    if (!trimmedDest) {
+      alert('กรุณากรอกปลายทาง');
+      return;
+    }
+
+    if (trimmedDest.length < 2) {
+      alert('กรุณากรอกปลายทางอย่างน้อย 2 ตัวอักษร');
+      return;
+    }
     
-    await analyzeRoutes({
+    const result = await analyzeRoutes({
       startLat: currentLat,
       startLng: currentLng,
-      destination: destination,
+      destination: trimmedDest,
     });
+
+    if (!result) {
+      setDestination('');
+    }
   };
 
   const createPM25Icon = (pm25: number) => {
-    const color = pm25 > 75 ? '#ef4444' : pm25 > 50 ? '#f97316' : pm25 > 35 ? '#eab308' : '#22c55e';
+    let bgColor = 'hsl(123, 43%, 42%)'; // good
+    if (pm25 > 75) bgColor = 'hsl(282, 44%, 43%)'; // very unhealthy
+    else if (pm25 > 50) bgColor = 'hsl(0, 100%, 50%)'; // unhealthy
+    else if (pm25 > 35) bgColor = 'hsl(33, 100%, 50%)'; // unhealthy for sensitive
+    else if (pm25 > 25) bgColor = 'hsl(48, 100%, 67%)'; // moderate
+
     return L.divIcon({
-      html: `<div style="background-color: ${color}; color: white; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; border: 2px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">${Math.round(pm25)}</div>`,
+      html: `<div style="background-color: ${bgColor}; color: white; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; border: 2px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">${Math.round(pm25)}</div>`,
       className: '',
       iconSize: [32, 32],
       iconAnchor: [16, 16],
@@ -132,11 +150,12 @@ export const RouteMapSimple = ({ currentLat, currentLng }: { currentLat: number;
   };
 
   const getRouteColor = (avgPM25: number, isSelected: boolean) => {
-    if (!isSelected) return '#94a3b8';
-    if (avgPM25 > 75) return '#ef4444';
-    if (avgPM25 > 50) return '#f97316';
-    if (avgPM25 > 35) return '#eab308';
-    return '#22c55e';
+    if (!isSelected) return 'hsl(var(--muted-foreground))';
+    if (avgPM25 > 75) return 'hsl(var(--aqi-very-unhealthy))';
+    if (avgPM25 > 50) return 'hsl(var(--aqi-unhealthy))';
+    if (avgPM25 > 35) return 'hsl(var(--aqi-unhealthy-sensitive))';
+    if (avgPM25 > 25) return 'hsl(var(--aqi-moderate))';
+    return 'hsl(var(--aqi-good))';
   };
 
   const getPM25Variant = (value: number): "default" | "destructive" | "outline" | "secondary" => {
